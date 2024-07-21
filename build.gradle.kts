@@ -87,7 +87,10 @@ tasks {
   if (localDir.isNotEmpty()) {
     val useLocalDir by registering(Copy::class) {
       from(localDir)
-      into("$buildDir/protos")
+      // 这里如果传输的路径不对，那么会导致构建出来的 proto 的包都是空包
+      // 下一步在 opentelemetry-java 中修改 proto 版本后会报错 'no source' 没有 proto 文件而导致构建失败
+      // into("$buildDir/protos")
+      into("$buildDir/protos/opentelemetry-proto-$protoVersion")
     }
 
     named("processResources") {
@@ -132,23 +135,23 @@ sourceSets {
   }
 }
 
-gradle.taskGraph.whenReady {
-  allTasks.forEach { task ->
-    if (
-      task.path.contains("jApiCmp", ignoreCase = true) ||
-      task.path.contains("test", ignoreCase = true) ||
-      task.path.contains("javadoc", ignoreCase = true) ||
-      task.path.contains("benchmark", ignoreCase = true) ||
-      task.path.contains("checkstyle") ||
-      task.path.contains("sourcesJar", ignoreCase = true)
-    ) {
-      println("skipping : ${task.path}")
-      task.enabled = false
-    } else {
-      println("excuting : ${task.path}")
-    }
-  }
-}
+// gradle.taskGraph.whenReady {
+//  allTasks.forEach { task ->
+//    if (
+//      task.path.contains("jApiCmp", ignoreCase = true) ||
+//      task.path.contains("test", ignoreCase = true) ||
+//      task.path.contains("javadoc", ignoreCase = true) ||
+//      task.path.contains("benchmark", ignoreCase = true) ||
+//      task.path.contains("checkstyle") ||
+//      task.path.contains("sourcesJar", ignoreCase = true)
+//    ) {
+//      println("skipping : ${task.path}")
+//      task.enabled = false
+//    } else {
+//      println("excuting : ${task.path}")
+//    }
+//  }
+// }
 
 nexusPublishing {
   packageGroup.set("io.opentelemetry")
