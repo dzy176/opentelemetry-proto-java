@@ -30,7 +30,14 @@ val grpcVersion = "1.56.1"
 val protobufVersion = "3.23.4"
 
 repositories {
-  mavenCentral()
+  maven {
+    url = uri("http://zmq:8081/repository/mvn-group/")
+    isAllowInsecureProtocol = true
+    credentials {
+      username = (System.getenv("NEXUS_USERNAME"))
+      password = (System.getenv("NEXUS_PASSWORD"))
+    }
+  }
   mavenLocal()
 }
 
@@ -74,27 +81,45 @@ var protoVersion = if (properties.contains(
   NearestVersionLocator(TagStrategy()).locate(release.grgit).any.toString()
 }
 val protoArchive = file("$buildDir/archives/opentelemetry-proto-$protoVersion.zip")
+val localDir = "/Users/daizhiyong/Documents/JavaProject/github/opentelemetry-proto"
 
 tasks {
-  val downloadProtoArchive by registering(Download::class) {
-    onlyIf { !protoArchive.exists() }
-    src("https://github.com/open-telemetry/opentelemetry-proto/archive/v$protoVersion.zip")
-    dest(protoArchive)
-  }
+  if (localDir.isNotEmpty()) {
+    val useLocalDir by registering(Copy::class) {
+      from(localDir)
+      into("$buildDir/protos")
+    }
 
-  val unzipProtoArchive by registering(Copy::class) {
-    dependsOn(downloadProtoArchive)
-    from(zipTree(protoArchive))
-    into("$buildDir/protos")
-  }
+    named("processResources") {
+      dependsOn(useLocalDir)
+    }
 
-  named("processResources") {
-    dependsOn(unzipProtoArchive)
-  }
+    afterEvaluate {
+      named("generateProto") {
+        dependsOn(useLocalDir)
+      }
+    }
+  } else {
+    val downloadProtoArchive by registering(Download::class) {
+      onlyIf { !protoArchive.exists() }
+      src("https://github.com/open-telemetry/opentelemetry-proto/archive/v$protoVersion.zip")
+      dest(protoArchive)
+    }
 
-  afterEvaluate {
-    named("generateProto") {
+    val unzipProtoArchive by registering(Copy::class) {
+      dependsOn(downloadProtoArchive)
+      from(zipTree(protoArchive))
+      into("$buildDir/protos")
+    }
+
+    named("processResources") {
       dependsOn(unzipProtoArchive)
+    }
+
+    afterEvaluate {
+      named("generateProto") {
+        dependsOn(unzipProtoArchive)
+      }
     }
   }
 }
@@ -107,6 +132,24 @@ sourceSets {
   }
 }
 
+gradle.taskGraph.whenReady {
+  allTasks.forEach { task ->
+    if (
+      task.path.contains("jApiCmp", ignoreCase = true) ||
+      task.path.contains("test", ignoreCase = true) ||
+      task.path.contains("javadoc", ignoreCase = true) ||
+      task.path.contains("benchmark", ignoreCase = true) ||
+      task.path.contains("checkstyle") ||
+      task.path.contains("sourcesJar", ignoreCase = true)
+    ) {
+      println("skipping : ${task.path}")
+      task.enabled = false
+    } else {
+      println("excuting : ${task.path}")
+    }
+  }
+}
+
 nexusPublishing {
   packageGroup.set("io.opentelemetry")
 
@@ -114,6 +157,15 @@ nexusPublishing {
     sonatype {
       username.set(System.getenv("SONATYPE_USER"))
       password.set(System.getenv("SONATYPE_KEY"))
+    }
+
+    create("myNexus") {
+      nexusUrl.set(uri("http://zmq:8081/repository/mvn-hosted/"))
+      snapshotRepositoryUrl.set(uri("http://zmq:8081/repository/mvn-hosted/"))
+      username.set(System.getenv("NEXUS_USERNAME"))
+      password.set(System.getenv("NEXUS_PASSWORD"))
+      useStaging.set(false)
+      allowInsecureProtocol.set(true)
     }
   }
 
